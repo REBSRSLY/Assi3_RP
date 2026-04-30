@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-st.set_page_config(page_title="Volley Stats R-W", layout="wide")
+st.set_page_config(page_title="Volley Stats", layout="wide")
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 df_raw = conn.read(spreadsheet=st.secrets["public_gsheets_url"])
@@ -28,7 +28,7 @@ for col in ["Impr_pct", "Err_pct", "Buono_pct"]:
     df[col] = df[col].apply(clean_pct)
 
 # INTERFACCIA
-st.title("🏐 Analisi Tecnica (Range R:W)")
+st.title("Analisi Tecnica partita di pallavolo")
 
 tab1, tab2 = st.tabs(["9 Grafici Fondamentali", "Dati Estratti"])
 
