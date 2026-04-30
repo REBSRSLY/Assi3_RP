@@ -10,7 +10,7 @@ st.title("🏐 Analisi Volley da Google Sheets")
 # --- CONNESSIONE (Punto 2) ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-df = conn.read(spreadsheet=st.secrets["https://docs.google.com/spreadsheets/d/16s_hXDtp5s8rkjFvoiD5JLrAXs8f-TKywNJSN3TzbAk/edit?usp=sharing"])
+df = conn.read(spreadsheet=st.secrets["public_gsheets_url"])
 
 # Pulizia veloce: nell'immagine_0cd37e.png vedo colonne con nomi strani
 # Rimuoviamo eventuali righe vuote o colonne totalmente nulle
