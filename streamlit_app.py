@@ -2,115 +2,89 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# Configurazione Layout
+# 1. Configurazione Layout
 st.set_page_config(page_title="Volley Dashboard", layout="wide")
+
+# 2. Connessione ai dati (Punto 2)
+conn = st.connection("gsheets", type=GSheetsConnection)
+df_raw = conn.read(spreadsheet=st.secrets["public_gsheets_url"])
+
+# --- PULIZIA DATI ---
+# Rimuoviamo righe/colonne vuote e sistemiamo l'errore ####
+df = df_raw.dropna(how='all', axis=0).dropna(how='all', axis=1).copy()
 df = df.replace('####', '100%')
 
-st.title("🏐 Analisi Volley da Google Sheets")
+# Riempliamo i nomi dei fondamentali (fondamentale per i 9 grafici)
+if 'Fondam.' in df.columns:
+    df['Fondam.'] = df['Fondam.'].ffill()
 
-# --- CONNESSIONE (Punto 2) ---
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-df = conn.read(spreadsheet=st.secrets["public_gsheets_url"])
-
-# Pulizia veloce: nell'immagine_0cd37e.png vedo colonne con nomi strani
-# Rimuoviamo eventuali righe vuote o colonne totalmente nulle
-df = df.dropna(how='all', axis=0).dropna(how='all', axis=1)
-
-st.sidebar.header("Filtri Dashboard")
-lista_giocatori = df["Giocatore"].unique().tolist()
-giocatore_scelto = st.sidebar.selectbox("Seleziona un Giocatore:", lista_giocatori)
-
-df_giocatore = df[df["Giocatore"] == giocatore_scelto]
-
-# --- Punto 3: Organizzazione con Container (Tabs) ---
-tab_generale, tab_confronto, tab_visual = st.tabs(["Riepilogo", "Confronto Ruoli", "Grafici Avanzati"])
-
-with tab_generale:
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Totale Azioni", df_giocatore["Tot"].iloc[0])
-    with col2:
-        st.metric("Efficienza (E%)", df_giocatore["*E%"].iloc[0])
-    with col3:
-        st.metric("Performance (pC)", df_giocatore["pC"].iloc[0])
-
-    st.divider()
-    st.subheader(f"Statistiche complete per {giocatore_scelto}")
-    st.dataframe(df_giocatore)
-
-with tab_confronto:
-    st.header("Analisi per Ruolo")
-    with st.expander("Clicca per vedere la tabella per Ruolo"):
-        ruolo_stats = df.groupby("Ruolo")["Tot"].sum().reset_index()
-        st.table(ruolo_stats)
-    
-    # Punto 4: Bar Chart (Istogramma)
-    st.subheader("Carico di lavoro per Ruolo (Totale azioni)")
-    st.bar_chart(data=df, x="Ruolo", y="Tot")
-
-with tab_visual:
-    st.header("Visualizzazioni Dettagliate")
-    
-    col_a, col_b = st.columns(2)
-    
-    with col_a:
-        st.subheader("Distribuzione Errori")
-        # Punto 4: Area Chart
-        st.area_chart(df.set_index("Giocatore")["#ERROR!"])
-        
-    with col_b:
-        st.subheader("Efficienza Indice")
-        # Punto 4: Line Chart
-        st.line_chart(df.set_index("Giocatore")["Ind"])
-
-# Funzione per pulire le percentuali e renderle graficabili
+# Funzione per pulire le percentuali
 def clean_pct(val):
     if isinstance(val, str):
         return float(val.replace('%', '').replace(',', '.'))
     return val
 
-# Applichiamo la pulizia alle colonne delle percentuali
-# Nota: Pandas rinomina le colonne duplicate come %, %.1, %.2, ecc.
-# Basandoci sulla tua immagine, identifichiamo le colonne degli indici -, !, +
+# Identifichiamo le colonne delle percentuali e le convertiamo in numeri
 pct_columns = [col for col in df.columns if '%' in col]
 for col in pct_columns:
     df[col] = df[col].apply(clean_pct)
 
-st.title("🏐 Analisi Tecnica per Fondamentale")
+# --- INTERFACCIA UTENTE (Bonus: Interattività) ---
+st.title("🏐 Volley Performance Analytics")
 
-# Lista dei 9 fondamentali basata sulla tua immagine
-fondamentali = [
-    "Battuta", "Ricezione", "Attacco", "Att dopo Ricez", 
-    "Contrattacco", "Muro", "Difesa", "Free ball", "Alzata"
-]
+st.sidebar.header("Filtri")
+lista_giocatori = df["Giocatore"].unique().tolist()
+giocatore_scelto = st.sidebar.selectbox("Seleziona un Giocatore per il Riepilogo:", lista_giocatori)
 
-# --- SEZIONE GRAFICI AVANZATI ---
-st.header("📈 Analisi Efficienza per Fondamentale")
+# --- ORGANIZZAZIONE IN CONTAINER (Punto 3) ---
+tab_generale, tab_confronto, tab_visual = st.tabs(["📊 Riepilogo", "👥 Confronto Ruoli", "📈 Analisi Fondamentali"])
 
-# Punto 3: Organizzazione con Colonne (ne facciamo 3 per riga per averne 9 totali)
-rows = [fondamentali[i:i + 3] for i in range(0, len(fondamentali), 3)]
+with tab_generale:
+    df_giocatore = df[df["Giocatore"] == giocatore_scelto]
+    if not df_giocatore.empty:
+        col1, col2, col3 = st.columns(3)
+        # Usiamo i dati reali dalle tue colonne (Immagine 0cd37e.png)
+        col1.metric("Totale Azioni", int(df_giocatore["Tot"].sum()))
+        col2.metric("Indice Efficienza", df_giocatore["Ind"].iloc[0])
+        col3.metric("Performance (pC)", df_giocatore["pC"].iloc[0])
+        
+        st.divider()
+        st.subheader(f"Dettaglio azioni: {giocatore_scelto}")
+        st.dataframe(df_giocatore)
 
-for row in rows:
-    cols = st.columns(3)
-    for i, fond in enumerate(row):
-        with cols[i]:
-            st.subheader(f"{fond}")
-            
-            # Filtriamo i dati per il fondamentale specifico
-            # Nota: se nel tuo DF la colonna Fondam. è vuota dopo la prima riga, 
-            # dovresti usare df['Fondam.'].ffill() prima di questo passaggio
-            df_fond = df[df['Fondam.'] == fond]
-            
-            if not df_fond.empty:
-                # Punto 4: Charting Options (Bar Chart per confrontare i giocatori)
-                # Visualizziamo la percentuale positiva '+' (solitamente la terza colonna % di ogni blocco)
-                # Modifica l'indice della colonna in base a quale % vuoi visualizzare
-                st.bar_chart(df_fond.set_index("Giocatore")[pct_columns[2]]) 
-            else:
-                st.info(f"Nessun dato per {fond}")
+with tab_confronto:
+    st.header("Carico di lavoro per Ruolo")
+    # Punto 4: Bar Chart
+    ruolo_stats = df.groupby("Ruolo")["Tot"].sum().reset_index()
+    st.bar_chart(data=ruolo_stats, x="Ruolo", y="Tot")
+    
+    with st.expander("Vedi tabella dati per ruolo"):
+        st.table(ruolo_stats)
 
-# Bonus: Expander per vedere i dati grezzi filtrati
-with st.expander("Vedi Tabella Percentuali"):
-    st.write(df[["Giocatore", "Fondam."] + pct_columns])
+with tab_visual:
+    st.header("Efficienza Positiva (+) per Fondamentale")
+    
+    fondamentali = [
+        "Battuta", "Ricezione", "Attacco", "Att dopo Ricez", 
+        "Contrattacco", "Muro", "Difesa", "Free ball", "Alzata"
+    ]
+    
+    # Punto 3 & 4: 9 Grafici organizzati in griglia 3x3
+    rows = [fondamentali[i:i + 3] for i in range(0, len(fondamentali), 3)]
+    
+    for row in rows:
+        cols = st.columns(3)
+        for i, fond in enumerate(row):
+            with cols[i]:
+                st.markdown(f"**{fond}**")
+                df_fond = df[df['Fondam.'] == fond]
+                
+                if not df_fond.empty:
+                    # Visualizziamo la terza colonna percentuale (quella del '+')
+                    # pct_columns[2] corrisponde alla colonna '+ %'
+                    st.bar_chart(df_fond.set_index("Giocatore")[pct_columns[2]])
+                else:
+                    st.caption("Nessun dato")
+
+with st.expander("🔍 Ispeziona Database Completo (Percentuali Pulite)"):
+    st.dataframe(df)
