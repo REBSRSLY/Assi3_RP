@@ -4,6 +4,7 @@ import pandas as pd
 
 # Configurazione Layout
 st.set_page_config(page_title="Volley Dashboard", layout="wide")
+df = df.replace('####', '100%')
 
 st.title("🏐 Analisi Volley da Google Sheets")
 
@@ -23,10 +24,9 @@ giocatore_scelto = st.sidebar.selectbox("Seleziona un Giocatore:", lista_giocato
 df_giocatore = df[df["Giocatore"] == giocatore_scelto]
 
 # --- Punto 3: Organizzazione con Container (Tabs) ---
-tab_generale, tab_confronto, tab_visual = st.tabs(["📊 Riepilogo", "⚔️ Confronto Ruoli", "📈 Grafici Avanzati"])
+tab_generale, tab_confronto, tab_visual = st.tabs(["Riepilogo", "Confronto Ruoli", "Grafici Avanzati"])
 
 with tab_generale:
-    # Punto 3: Uso di Colonne
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -64,3 +64,53 @@ with tab_visual:
         st.subheader("Efficienza Indice")
         # Punto 4: Line Chart
         st.line_chart(df.set_index("Giocatore")["Ind"])
+
+# Funzione per pulire le percentuali e renderle graficabili
+def clean_pct(val):
+    if isinstance(val, str):
+        return float(val.replace('%', '').replace(',', '.'))
+    return val
+
+# Applichiamo la pulizia alle colonne delle percentuali
+# Nota: Pandas rinomina le colonne duplicate come %, %.1, %.2, ecc.
+# Basandoci sulla tua immagine, identifichiamo le colonne degli indici -, !, +
+pct_columns = [col for col in df.columns if '%' in col]
+for col in pct_columns:
+    df[col] = df[col].apply(clean_pct)
+
+st.title("🏐 Analisi Tecnica per Fondamentale")
+
+# Lista dei 9 fondamentali basata sulla tua immagine
+fondamentali = [
+    "Battuta", "Ricezione", "Attacco", "Att dopo Ricez", 
+    "Contrattacco", "Muro", "Difesa", "Free ball", "Alzata"
+]
+
+# --- SEZIONE GRAFICI AVANZATI ---
+st.header("📈 Analisi Efficienza per Fondamentale")
+
+# Punto 3: Organizzazione con Colonne (ne facciamo 3 per riga per averne 9 totali)
+rows = [fondamentali[i:i + 3] for i in range(0, len(fondamentali), 3)]
+
+for row in rows:
+    cols = st.columns(3)
+    for i, fond in enumerate(row):
+        with cols[i]:
+            st.subheader(f"{fond}")
+            
+            # Filtriamo i dati per il fondamentale specifico
+            # Nota: se nel tuo DF la colonna Fondam. è vuota dopo la prima riga, 
+            # dovresti usare df['Fondam.'].ffill() prima di questo passaggio
+            df_fond = df[df['Fondam.'] == fond]
+            
+            if not df_fond.empty:
+                # Punto 4: Charting Options (Bar Chart per confrontare i giocatori)
+                # Visualizziamo la percentuale positiva '+' (solitamente la terza colonna % di ogni blocco)
+                # Modifica l'indice della colonna in base a quale % vuoi visualizzare
+                st.bar_chart(df_fond.set_index("Giocatore")[pct_columns[2]]) 
+            else:
+                st.info(f"Nessun dato per {fond}")
+
+# Bonus: Expander per vedere i dati grezzi filtrati
+with st.expander("Vedi Tabella Percentuali"):
+    st.write(df[["Giocatore", "Fondam."] + pct_columns])
