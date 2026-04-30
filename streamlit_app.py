@@ -5,7 +5,7 @@ from streamlit_gsheets import GSheetsConnection
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Lettura dei dati (usa il nome del foglio se necessario)
-df = conn.read(spreadsheet="Assi3RP")
+df = conn.read(spreadsheet="https://docs.google.com/spreadsheets/d/16s_hXDtp5s8rkjFvoiD5JLrAXs8f-TKywNJSN3TzbAk/edit?gid=0#gid=0")
 
 st.write("Ecco i dati dal mio Google Sheet:")
 st.dataframe(df)
