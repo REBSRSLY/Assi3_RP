@@ -2,89 +2,57 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# 1. Configurazione Layout
 st.set_page_config(page_title="Volley Dashboard", layout="wide")
 
-# 2. Connessione ai dati (Punto 2)
+# Connessione
 conn = st.connection("gsheets", type=GSheetsConnection)
 df_raw = conn.read(spreadsheet=st.secrets["public_gsheets_url"])
 
-# --- PULIZIA DATI ---
-# Rimuoviamo righe/colonne vuote e sistemiamo l'errore ####
-df = df_raw.dropna(how='all', axis=0).dropna(how='all', axis=1).copy()
+# Copia e pulizia iniziale
+df = df_raw.copy()
 df = df.replace('####', '100%')
 
-# Riempliamo i nomi dei fondamentali (fondamentale per i 9 grafici)
+# Riempimento fondamentali (fondamentale per i 9 grafici)
 if 'Fondam.' in df.columns:
     df['Fondam.'] = df['Fondam.'].ffill()
 
-# Funzione per pulire le percentuali
+# Nuova funzione di pulizia robusta
 def clean_pct(val):
-    if isinstance(val, str):
-        return float(val.replace('%', '').replace(',', '.'))
-    return val
+    if val is None or pd.isna(val): return 0.0
+    val_str = str(val).replace('%', '').replace(',', '.').strip()
+    try:
+        return float(val_str)
+    except ValueError:
+        return 0.0
 
-# Identifichiamo le colonne delle percentuali e le convertiamo in numeri
-pct_columns = [col for col in df.columns if '%' in col]
+# Applichiamo la pulizia solo alle colonne che contengono '%' nel nome
+pct_columns = [col for col in df.columns if '%' in str(col)]
 for col in pct_columns:
     df[col] = df[col].apply(clean_pct)
 
-# --- INTERFACCIA UTENTE (Bonus: Interattività) ---
-st.title("🏐 Volley Performance Analytics")
+st.title("🏐 Analisi Tecnica Volley")
 
-st.sidebar.header("Filtri")
-lista_giocatori = df["Giocatore"].unique().tolist()
-giocatore_scelto = st.sidebar.selectbox("Seleziona un Giocatore per il Riepilogo:", lista_giocatori)
+# --- ORGANIZZAZIONE TABS ---
+tab_riepilogo, tab_fondamentali = st.tabs(["📊 Riepilogo", "📈 Analisi Fondamentali"])
 
-# --- ORGANIZZAZIONE IN CONTAINER (Punto 3) ---
-tab_generale, tab_confronto, tab_visual = st.tabs(["📊 Riepilogo", "👥 Confronto Ruoli", "📈 Analisi Fondamentali"])
-
-with tab_generale:
-    df_giocatore = df[df["Giocatore"] == giocatore_scelto]
-    if not df_giocatore.empty:
-        col1, col2, col3 = st.columns(3)
-        # Usiamo i dati reali dalle tue colonne (Immagine 0cd37e.png)
-        col1.metric("Totale Azioni", int(df_giocatore["Tot"].sum()))
-        col2.metric("Indice Efficienza", df_giocatore["Ind"].iloc[0])
-        col3.metric("Performance (pC)", df_giocatore["pC"].iloc[0])
-        
-        st.divider()
-        st.subheader(f"Dettaglio azioni: {giocatore_scelto}")
-        st.dataframe(df_giocatore)
-
-with tab_confronto:
-    st.header("Carico di lavoro per Ruolo")
-    # Punto 4: Bar Chart
-    ruolo_stats = df.groupby("Ruolo")["Tot"].sum().reset_index()
-    st.bar_chart(data=ruolo_stats, x="Ruolo", y="Tot")
-    
-    with st.expander("Vedi tabella dati per ruolo"):
-        st.table(ruolo_stats)
-
-with tab_visual:
-    st.header("Efficienza Positiva (+) per Fondamentale")
-    
-    fondamentali = [
-        "Battuta", "Ricezione", "Attacco", "Att dopo Ricez", 
-        "Contrattacco", "Muro", "Difesa", "Free ball", "Alzata"
-    ]
-    
-    # Punto 3 & 4: 9 Grafici organizzati in griglia 3x3
-    rows = [fondamentali[i:i + 3] for i in range(0, len(fondamentali), 3)]
-    
-    for row in rows:
-        cols = st.columns(3)
-        for i, fond in enumerate(row):
-            with cols[i]:
-                st.markdown(f"**{fond}**")
-                df_fond = df[df['Fondam.'] == fond]
-                
-                if not df_fond.empty:
-                    # Visualizziamo la terza colonna percentuale (quella del '+')
-                    # pct_columns[2] corrisponde alla colonna '+ %'
-                    st.bar_chart(df_fond.set_index("Giocatore")[pct_columns[2]])
-                else:
-                    st.caption("Nessun dato")
-
-with st.expander("🔍 Ispeziona Database Completo (Percentuali Pulite)"):
+with tab_riepilogo:
+    st.subheader("Database Completo")
     st.dataframe(df)
+
+with tab_fondamentali:
+    fondamentali = ["Battuta", "Ricezione", "Attacco", "Att dopo Ricez", 
+                    "Contrattacco", "Muro", "Difesa", "Free ball", "Alzata"]
+    
+    # Griglia 3x3
+    for i in range(0, len(fondamentali), 3):
+        cols = st.columns(3)
+        for j in range(3):
+            if i + j < len(fondamentali):
+                fond = fondamentali[i + j]
+                with cols[j]:
+                    st.markdown(f"**{fond}**")
+                    df_fond = df[df['Fondam.'] == fond]
+                    if not df_fond.empty:
+                        # Usiamo la terza colonna percentuale disponibile (+ %)
+                        col_da_usare = pct_columns[2] if len(pct_columns) > 2 else pct_columns[0]
+                        st.bar_chart(df_fond.set_index("Giocatore")[col_da_usare])
